@@ -1,0 +1,76 @@
+Nb=10;b=rand(1,100)>0.5;
+y = SOQPSK_modulator(Nb,b);
+figure(1);
+m=real(y);
+n=imag(y);
+plot(m,n,'r*');
+grid on;
+xlabel('In-Phase Amplitude');
+ylabel('Quadrature Amplitude');
+title('Constellation Diagram');
+EbN0db=-5:2:20;
+for i=EbN0db
+    BER_SOQPSK=0.5*erfc(sqrt(1.60*(10.^(EbN0db/10))));
+    BER_QPSK=0.5*erfc(sqrt(10.^(EbN0db/10)));
+end
+figure(2);
+semilogy(EbN0db,BER_SOQPSK);
+hold on;
+plot(EbN0db,BER_QPSK);
+legend('BER_SOQPSK','BER_QPSK');
+xlabel('Eb/N0');
+ylabel('BER');
+function y = SOQPSK_modulator(Nb,b)
+% function y = SOQPSK_modulator(Nb,b)
+% Nb = number of samples/bit
+% b = bits (0,1)
+
+f = SOQPSK_frequency_pulse_internal(Nb);
+a = 2*b-1;
+aa = zeros(size(a));
+aa(1) = 0.5*(-1)*(a(1)+1);
+aa(2) = 0.5*a(1)*(a(2)+1);
+%
+% The assumption for a(0) and a(-1) means
+% initial phase state is 3*pi/2
+% An additional -pi/4 phase shift is added to 
+% generate nice looking I/Q eye diagrams
+%
+aa(3:end) = 0.5*a(2:end-1).*(a(3:end)-a(1:end-2));
+aa(1:2:end) = -aa(1:2:end);
+%oversaampling
+temp = zeros(1,Nb*(length(aa)-1)+1);
+temp(1:Nb:end) = aa;
+dphi = pi*conv(temp,f);
+phi = filter([0 1],[1 -1],dphi) + 3*pi/2 - pi/4;
+y = exp(1i*phi);
+fs=10e3;
+figure(3);
+pwelch(y,[],[],[],fs,'centered');
+
+% m =real(y);
+% n =imag(y);
+%return;
+end
+
+function f = SOQPSK_frequency_pulse_internal(N)
+% function f = SOQPSK_frequency_pulse_internal(N)
+% N = samples/bit
+
+rho = 0.7;
+B = 1.25;
+T1 = 1.5;
+T2 = 0.5;
+
+n1 = 0:2*N*T1-1;
+n2 = 2*N*T1:2*N*(T1+T2);
+nall = [n1 n2];           %nall=t, N=Ts
+
+part1 = cos(pi*rho*B*nall/(2*N)) ./ (1-4*(rho*B*nall/(2*N)).^2);
+part2 = sinc(B*nall/(2*N));
+w = [ones(size(n1)) 0.5*(1+cos(pi/T2*(n2/(2*N)-T1)))];
+temp = part1 .* part2 .* w;
+f = [temp(end:-1:2) temp];
+f = f*0.5/sum(f);
+%return;
+end
